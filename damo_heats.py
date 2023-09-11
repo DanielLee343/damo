@@ -21,6 +21,8 @@ import _damo_ascii_color
 import _damo_fmt_str
 import _damon_result
 
+addr_ranges = []
+
 class HeatPixel:
     time = None
     addr = None
@@ -289,9 +291,11 @@ def set_missed_args(args, records):
     if not args.time_range:
         args.time_range = [guide.start_time, guide.end_time]
 
-    if not args.address_range:
-        args.address_range = sorted(guide.regions(), key=lambda x: x[1] - x[0],
-                reverse=True)[0]
+    global addr_ranges
+    addr_ranges = sorted(
+        guide.regions(), key=lambda x: x[1] - x[0], reverse=True
+    )
+    print("global ranges:", addr_ranges)
 
 def plot_range(orig_range, use_absolute_val):
     plot_range = [x for x in orig_range]
@@ -306,9 +310,17 @@ def plot_heatmap(data_file, output_file, args):
         os.remove(data_file)
         print("Unsupported plot output type.")
         exit(-1)
+    to_mb_str = ""
 
     x_range = plot_range(args.time_range, args.abs_time)
     y_range = plot_range(args.address_range, args.abs_addr)
+    if x_range[0] == 0:  # relative addr, change unit
+        x_range[1] = x_range[1] / 1000000000  # ns to s
+        if not args.abs_addr:
+            y_range[1] = y_range[1] / (1024 * 1024)  # bytes to MB
+            to_mb_str = "/ (1024 * 1024)" # if requires relative addr, each datapoint, convert bytes to MB, otherwise, don't devide
+    # print(x_range)
+    # print(y_range)
 
     gnuplot_cmd = """
     set term %s;
@@ -316,10 +328,10 @@ def plot_heatmap(data_file, output_file, args):
     set key off;
     set xrange [%f:%f];
     set yrange [%f:%f];
-    set xlabel 'Time (ns)';
-    set ylabel 'Address (bytes)';
-    plot '%s' using 1:2:3 with image;""" % (terminal, output_file, x_range[0],
-            x_range[1], y_range[0], y_range[1], data_file)
+    set xlabel 'Time (s)';
+    set ylabel 'Address (mb)';
+    plot '%s' using ($1 / 1000000000):($2 %s):3 with image;""" % (terminal, output_file, x_range[0],
+            x_range[1], y_range[0], y_range[1], data_file, to_mb_str)
     subprocess.call(['gnuplot', '-e', gnuplot_cmd])
     os.remove(data_file)
 
@@ -357,6 +369,13 @@ def set_argparser(parser):
             action='store_true',
             help='skip printing example colors at the output')
     parser.description='Show when which address ranges were how frequently accessed'
+    
+def insert_string_in_filepath(filepath, insert_string):
+    directory = os.path.dirname(filepath)
+    filename, extension = os.path.splitext(os.path.basename(filepath))
+    new_filename = f"{filename}{insert_string}{extension}"
+    new_filepath = os.path.join(directory, new_filename)
+    return new_filepath
 
 def main(args=None):
     if not args:
@@ -389,19 +408,59 @@ def main(args=None):
         pr_guide(records)
     else:
         set_missed_args(args, records)
-        orig_stdout = sys.stdout
-        if args.heatmap and args.heatmap != 'stdout':
-            tmp_path = tempfile.mkstemp()[1]
-            tmp_file = open(tmp_path, 'w')
-            sys.stdout = tmp_file
+        # orig_stdout = sys.stdout
+        # if args.heatmap and args.heatmap != 'stdout':
+        #     tmp_path = tempfile.mkstemp()[1]
+        #     print(tmp_path)
+        #     tmp_file = open(tmp_path, 'w')
+        #     sys.stdout = tmp_file
 
-        pr_heats(args, records)
+        # pr_heats(args, records)
 
-        if args.heatmap and args.heatmap != 'stdout':
-            sys.stdout = orig_stdout
-            tmp_file.flush()
-            tmp_file.close()
-            plot_heatmap(tmp_path, args.heatmap, args)
+        # if args.heatmap and args.heatmap != 'stdout':
+        #     sys.stdout = orig_stdout
+        #     tmp_file.flush()
+        #     tmp_file.close()
+        #     plot_heatmap(tmp_path, args.heatmap, args)
+
+        if args.address_range:
+            print("plotting specific range:", args.address_range)
+            orig_stdout = sys.stdout
+            if args.heatmap and args.heatmap != 'stdout':
+                tmp_path = tempfile.mkstemp()[1]
+                tmp_file = open(tmp_path, 'w')
+                sys.stdout = tmp_file
+
+            pr_heats(args, records)
+
+            if args.heatmap and args.heatmap != 'stdout':
+                sys.stdout = orig_stdout
+                tmp_file.flush()
+                tmp_file.close()
+                plot_heatmap(tmp_path, args.heatmap, args)
+
+        else:
+            global addr_ranges
+            for index, each_addr in enumerate(addr_ranges):
+                args.address_range = each_addr
+                orig_stdout = sys.stdout
+                if args.heatmap and args.heatmap != 'stdout':
+                    tmp_path = tempfile.mkstemp()[1]
+                    tmp_file = open(tmp_path, 'w')
+                    sys.stdout = tmp_file
+
+                pr_heats(args, records)
+
+                if args.heatmap and args.heatmap != 'stdout':
+                    sys.stdout = orig_stdout
+                    tmp_file.flush()
+                    tmp_file.close()
+                    cur_heatmap_name = insert_string_in_filepath(
+                        args.heatmap, "_" + str(index)
+                    )
+                    print(cur_heatmap_name)
+                    # plot_heatmap(tmp_path, args.heatmap, args)
+                    plot_heatmap(tmp_path, cur_heatmap_name, args)
 
 if __name__ == '__main__':
     main()
