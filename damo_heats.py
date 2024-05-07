@@ -21,6 +21,9 @@ import _damo_ascii_color
 import _damo_fmt_str
 import _damon_result
 
+addr_ranges = []
+
+
 class HeatPixel:
     time = None
     addr = None
@@ -30,6 +33,7 @@ class HeatPixel:
         self.time = time
         self.addr = addr
         self.heat = heat
+
 
 def add_heats(snapshot, duration, pixels, time_unit, space_unit, addr_range):
     """Add heats in a monitoring 'snapshot' of specific time 'duration' to
@@ -47,9 +51,9 @@ def add_heats(snapshot, duration, pixels, time_unit, space_unit, addr_range):
         addr_idx = int(float(fraction_start - addr_range[0]) / space_unit)
         while fraction_start < end:
             fraction_end = min((addr_idx + 1) * space_unit + addr_range[0],
-                    end)
+                               end)
             heat = region.nr_accesses.samples * duration * (
-                    fraction_end - fraction_start)
+                fraction_end - fraction_start)
 
             pixel = pixels[addr_idx]
             heat += pixel.heat * pixel_sz
@@ -58,14 +62,15 @@ def add_heats(snapshot, duration, pixels, time_unit, space_unit, addr_range):
             fraction_start = fraction_end
             addr_idx += 1
 
+
 def heat_pixels_from_snapshots(snapshots, time_range, addr_range, resols):
     """Get heat pixels for monitoring snapshots."""
     time_unit = (time_range[1] - time_range[0]) / float(resols[0])
     space_unit = (addr_range[1] - addr_range[0]) / float(resols[1])
 
     pixels = [[HeatPixel(int(time_range[0] + i * time_unit),
-                    int(addr_range[0] + j * space_unit), 0.0)
-            for j in range(resols[1])] for i in range(resols[0])]
+                         int(addr_range[0] + j * space_unit), 0.0)
+               for j in range(resols[1])] for i in range(resols[0])]
 
     if len(snapshots) < 2:
         return pixels
@@ -79,13 +84,14 @@ def heat_pixels_from_snapshots(snapshots, time_range, addr_range, resols):
         while fraction_start < end:
             fraction_end = min((time_idx + 1) * time_unit + time_range[0], end)
             add_heats(shot, fraction_end - fraction_start, pixels[time_idx],
-                    time_unit, space_unit, addr_range)
+                      time_unit, space_unit, addr_range)
             fraction_start = fraction_end
             time_idx += 1
     return pixels
 
+
 def heatmap_plot_ascii(pixels, time_range, addr_range, resols, colorset,
-        print_colorset):
+                       print_colorset):
     highest_heat = None
     lowest_heat = None
     for snapshot in pixels:
@@ -104,22 +110,23 @@ def heatmap_plot_ascii(pixels, time_range, addr_range, resols, colorset,
             heat = int(float(pixel.heat - lowest_heat) / heat_unit)
             heat = min(heat, _damo_ascii_color.max_color_level())
             chars.append('%s%d' %
-                    (_damo_ascii_color.color_mode_start_txt(colorset, heat),
-                        heat))
+                         (_damo_ascii_color.color_mode_start_txt(colorset, heat),
+                          heat))
         print(''.join(chars) + _damo_ascii_color.color_mode_end_txt())
     if print_colorset:
         print('# access_frequency: %s' %
-                _damo_ascii_color.color_samples(colorset))
+              _damo_ascii_color.color_samples(colorset))
     print('# x-axis: space (%d-%d: %s)' % (addr_range[0], addr_range[1],
-        _damo_fmt_str.format_sz(addr_range[1] - addr_range[0], False)))
+                                           _damo_fmt_str.format_sz(addr_range[1] - addr_range[0], False)))
     print('# y-axis: time (%d-%d: %s)' % (time_range[0], time_range[1],
-        _damo_fmt_str.format_time_ns(time_range[1] - time_range[0], False)))
+                                          _damo_fmt_str.format_time_ns(time_range[1] - time_range[0], False)))
     print('# resolution: %dx%d (%s and %s for each character)' % (
         len(pixels[1]), len(pixels),
         _damo_fmt_str.format_sz(
             float(addr_range[1] - addr_range[0]) / len(pixels[1]), False),
         _damo_fmt_str.format_time_ns(
             float(time_range[1] - time_range[0]) / len(pixels), False)))
+
 
 def pr_heats(args, __records):
     tid = args.tid
@@ -146,12 +153,12 @@ def pr_heats(args, __records):
 
     for record in records:
         pixels = heat_pixels_from_snapshots(record.snapshots,
-                [tmin, tmax], [amin, amax], [tres, ares])
+                                            [tmin, tmax], [amin, amax], [tres, ares])
 
         if args.heatmap == 'stdout':
             heatmap_plot_ascii(pixels, [tmin, tmax], [amin, amax],
-                    [tres, ares], args.stdout_heatmap_color, not
-                    args.stdout_heatmap_skip_color_example)
+                               [tres, ares], args.stdout_heatmap_color, not
+                               args.stdout_heatmap_skip_color_example)
             return
 
         for row in pixels:
@@ -164,6 +171,7 @@ def pr_heats(args, __records):
                     addr -= amin
 
                 print('%s\t%s\t%s' % (time, addr, pixel.heat))
+
 
 class GuideInfo:
     tid = None
@@ -201,13 +209,14 @@ class GuideInfo:
     def __str__(self):
         lines = ['target_id:%d' % self.tid]
         lines.append('time: %d-%d (%s)' % (self.start_time, self.end_time,
-                    _damo_fmt_str.format_time_ns(self.end_time - self.start_time,
-                        False)))
+                                           _damo_fmt_str.format_time_ns(self.end_time - self.start_time,
+                                                                        False)))
         for idx, region in enumerate(self.regions()):
             lines.append('region\t%2d: %020d-%020d (%s)' %
-                    (idx, region[0], region[1],
-                        _damo_fmt_str.format_sz(region[1] - region[0], False)))
+                         (idx, region[0], region[1],
+                          _damo_fmt_str.format_sz(region[1] - region[0], False)))
         return '\n'.join(lines)
+
 
 def is_overlap(region1, region2):
     if region1[1] < region2[0]:
@@ -216,8 +225,10 @@ def is_overlap(region1, region2):
         return False
     return True
 
+
 def overlap_region_of(region1, region2):
     return [max(region1[0], region2[0]), min(region1[1], region2[1])]
+
 
 def overlapping_regions(regions1, regions2):
     overlap_regions = []
@@ -228,6 +239,7 @@ def overlapping_regions(regions1, regions2):
         if r1:
             overlap_regions.append(r1)
     return overlap_regions
+
 
 def get_guide_info(records):
     "return the set of guide information for the moitoring result"
@@ -265,14 +277,17 @@ def get_guide_info(records):
                 guide.gaps = overlapping_regions(guide.gaps, gaps)
 
     return sorted(list(guides.values()), key=lambda x: x.total_space(),
-                    reverse=True)
+                  reverse=True)
+
 
 def pr_guide(records):
     for guide in get_guide_info(records):
         print(guide)
 
+
 def region_sort_key(region):
     return region[1] - region[0]
+
 
 def set_missed_args(args, records):
     if args.tid and args.time_range and args.address_range:
@@ -289,9 +304,12 @@ def set_missed_args(args, records):
     if not args.time_range:
         args.time_range = [guide.start_time, guide.end_time]
 
-    if not args.address_range:
-        args.address_range = sorted(guide.regions(), key=lambda x: x[1] - x[0],
-                reverse=True)[0]
+    global addr_ranges
+    addr_ranges = sorted(
+        guide.regions(), key=lambda x: x[1] - x[0], reverse=True
+    )
+    print("global ranges:", addr_ranges, file=sys.stderr)
+
 
 def plot_range(orig_range, use_absolute_val):
     plot_range = [x for x in orig_range]
@@ -300,15 +318,30 @@ def plot_range(orig_range, use_absolute_val):
         plot_range[1] -= orig_range[0]
     return plot_range
 
+
 def plot_heatmap(data_file, output_file, args):
     terminal = output_file.split('.')[-1]
     if not terminal in ['pdf', 'jpeg', 'png', 'svg']:
         os.remove(data_file)
         print("Unsupported plot output type.")
         exit(-1)
+    to_mb_str = ""
 
     x_range = plot_range(args.time_range, args.abs_time)
-    y_range = plot_range(args.address_range, args.abs_addr)
+    # y_range = plot_range(args.address_range, args.abs_addr)
+    y_range = [x for x in args.address_range]
+    y_range[0] -= args.address_range[0]
+    y_range[1] -= args.address_range[0]
+    if x_range[0] == 0:  # relative addr, change unit
+        x_range[1] = x_range[1] / 1000000000  # ns to s
+    # if not args.abs_addr:
+    y_range[1] = y_range[1] / (1024 * 1024)  # bytes to MB
+    print("x_range:", x_range)
+    print("y_range:", y_range)
+    # if requires relative addr, each datapoint, convert bytes to MB, otherwise, don't devide
+    to_mb_str = "/ (1024 * 1024)"
+    # print(x_range)
+    # print(y_range)
 
     gnuplot_cmd = """
     set term %s;
@@ -316,47 +349,59 @@ def plot_heatmap(data_file, output_file, args):
     set key off;
     set xrange [%f:%f];
     set yrange [%f:%f];
-    set xlabel 'Time (ns)';
-    set ylabel 'Address (bytes)';
-    plot '%s' using 1:2:3 with image;""" % (terminal, output_file, x_range[0],
-            x_range[1], y_range[0], y_range[1], data_file)
+    set ylabel 'Address (MB)';
+    set xlabel 'Time (s)';
+    plot '%s' using ($1 / 1000000000):(($2 - %f) %s):3 with image;""" % (terminal, output_file, x_range[0],
+                                                                         x_range[1], y_range[0], y_range[1], data_file, args.address_range[0], to_mb_str)
     subprocess.call(['gnuplot', '-e', gnuplot_cmd])
     os.remove(data_file)
+# set palette defined ( 0 'white', 1 'cyan', 2 'green', 3 'yellow', 4 'orange', 5 'red', 6 'dark-red');
+# unset ytics;
+
 
 def set_argparser(parser):
     parser.add_argument('--input', '-i', type=str, metavar='<file>',
-            default='damon.data', help='input file name')
+                        default='damon.data', help='input file name')
 
     parser.add_argument('--tid', metavar='<id>', type=int,
-            help='target id')
+                        help='target id')
     parser.add_argument('--resol', metavar='<resolution>', type=int, nargs=2,
-            default=[500, 500],
-            help='resolutions for time and address axes')
+                        default=[500, 500],
+                        help='resolutions for time and address axes')
     parser.add_argument('--time_range', metavar='<time>', type=int, nargs=2,
-            help='start and end time of the output')
+                        help='start and end time of the output')
     parser.add_argument('--address_range', metavar='<address>', type=int,
-            nargs=2, help='start and end address of the output')
+                        nargs=2, help='start and end address of the output')
     parser.add_argument('--abs_time', action='store_true', default=False,
-            help='display absolute time in output')
+                        help='display absolute time in output')
     parser.add_argument('--abs_addr', action='store_true', default=False,
-            help='display absolute address in output')
+                        help='display absolute address in output')
 
     parser.add_argument('--guide', action='store_true',
-            help='print a guidance for the ranges and resolution settings')
+                        help='print a guidance for the ranges and resolution settings')
     parser.add_argument('--heatmap', metavar='<file>', type=str,
-            help='heatmap image file to create.  stdout for terminal output')
+                        help='heatmap image file to create.  stdout for terminal output')
     parser.add_argument('--stdout_heatmap_color',
-            choices=['gray', 'flame', 'emotion'],
-            help='color theme for access frequencies')
+                        choices=['gray', 'flame', 'emotion'],
+                        help='color theme for access frequencies')
     parser.add_argument('--ascii_color',
-            choices=['gray', 'flame', 'emotion'],
-            help='another name of stdout_heatmap_color')
+                        choices=['gray', 'flame', 'emotion'],
+                        help='another name of stdout_heatmap_color')
     parser.add_argument('--plot_ascii', action='store_true',
-            help='shortcut of \'--heatmap stdout\'')
+                        help='shortcut of \'--heatmap stdout\'')
     parser.add_argument('--stdout_heatmap_skip_color_example',
-            action='store_true',
-            help='skip printing example colors at the output')
-    parser.description='Show when which address ranges were how frequently accessed'
+                        action='store_true',
+                        help='skip printing example colors at the output')
+    parser.description = 'Show when which address ranges were how frequently accessed'
+
+
+def insert_string_in_filepath(filepath, insert_string):
+    directory = os.path.dirname(filepath)
+    filename, extension = os.path.splitext(os.path.basename(filepath))
+    new_filename = f"{filename}{insert_string}{extension}"
+    new_filepath = os.path.join(directory, new_filename)
+    return new_filepath
+
 
 def main(args=None):
     if not args:
@@ -378,7 +423,7 @@ def main(args=None):
     records, err = _damon_result.parse_records_file(args.input)
     if err != None:
         print('monitoring result file (%s) parsing failed (%s)' %
-                (args.input, err))
+              (args.input, err))
         exit(1)
 
     # Use 80x40 resolution as default for ascii plot
@@ -389,19 +434,60 @@ def main(args=None):
         pr_guide(records)
     else:
         set_missed_args(args, records)
-        orig_stdout = sys.stdout
-        if args.heatmap and args.heatmap != 'stdout':
-            tmp_path = tempfile.mkstemp()[1]
-            tmp_file = open(tmp_path, 'w')
-            sys.stdout = tmp_file
+        # orig_stdout = sys.stdout
+        # if args.heatmap and args.heatmap != 'stdout':
+        #     tmp_path = tempfile.mkstemp()[1]
+        #     print(tmp_path)
+        #     tmp_file = open(tmp_path, 'w')
+        #     sys.stdout = tmp_file
 
-        pr_heats(args, records)
+        # pr_heats(args, records)
 
-        if args.heatmap and args.heatmap != 'stdout':
-            sys.stdout = orig_stdout
-            tmp_file.flush()
-            tmp_file.close()
-            plot_heatmap(tmp_path, args.heatmap, args)
+        # if args.heatmap and args.heatmap != 'stdout':
+        #     sys.stdout = orig_stdout
+        #     tmp_file.flush()
+        #     tmp_file.close()
+        #     plot_heatmap(tmp_path, args.heatmap, args)
+
+        if args.address_range:
+            print("plotting specific range:", args.address_range)
+            orig_stdout = sys.stdout
+            if args.heatmap and args.heatmap != 'stdout':
+                tmp_path = tempfile.mkstemp()[1]
+                tmp_file = open(tmp_path, 'w')
+                sys.stdout = tmp_file
+
+            pr_heats(args, records)
+
+            if args.heatmap and args.heatmap != 'stdout':
+                sys.stdout = orig_stdout
+                tmp_file.flush()
+                tmp_file.close()
+                plot_heatmap(tmp_path, args.heatmap, args)
+
+        else:
+            global addr_ranges
+            for index, each_addr in enumerate(addr_ranges):
+                args.address_range = each_addr
+                orig_stdout = sys.stdout
+                if args.heatmap and args.heatmap != 'stdout':
+                    tmp_path = tempfile.mkstemp()[1]
+                    tmp_file = open(tmp_path, 'w')
+                    sys.stdout = tmp_file
+
+                pr_heats(args, records)
+
+                if args.heatmap and args.heatmap != 'stdout':
+                    sys.stdout = orig_stdout
+                    tmp_file.flush()
+                    tmp_file.close()
+                    cur_heatmap_name = insert_string_in_filepath(
+                        args.heatmap, "_" + str(index)
+                    )
+                    print(cur_heatmap_name)
+                    # plot_heatmap(tmp_path, args.heatmap, args)
+                    plot_heatmap(tmp_path, cur_heatmap_name, args)
+
 
 if __name__ == '__main__':
     main()
